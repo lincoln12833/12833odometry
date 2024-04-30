@@ -2,6 +2,7 @@ package org.firstinspires.ftc.mmcenterstage;
 
 import com.acmerobotics.dashboard.config.Config;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
+import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.hardware.Gamepad;
 import com.qualcomm.robotcore.util.ElapsedTime;
@@ -27,11 +28,6 @@ public class MM_Drivetrain {
     private DcMotorEx frMotor = null;
     private DcMotorEx blMotor = null;
     private DcMotorEx brMotor = null;
-
-    private DcMotorEx leftEncoder = null;
-    private DcMotorEx rightEncoder = null;
-    private DcMotorEx backEncoder = null;
-
     //public MM_AprilTags aprilTags;
 
     private Gamepad currentGamepad1;
@@ -39,7 +35,7 @@ public class MM_Drivetrain {
     private Telemetry dashboardTelemetry;
     boolean isSlow = false;
 
-    public static double MAX_DRIVE_POWER = .5;
+    public static double MAX_DRIVE_POWER = .65;
     public static double MIN_DRIVE_POWER = .28;
     public static double DRIVE_P_COEFF = .0166;
 
@@ -51,6 +47,11 @@ public class MM_Drivetrain {
     private final double TICKS_PER_INCH = TICKS_PER_REVOLUTION / WHEEL_CIRCUMFERENCE;
 
     static double COORDINATE_THRESHOLD = .3;
+
+    private double flPower = 0;
+    private double frPower = 0;
+    private double blPower = 0;
+    private double brPower = 0;
 
     double xIntercept = 0; //TODO add changeable start
     double yIntercept = 0;
@@ -113,15 +114,25 @@ public class MM_Drivetrain {
         rightError = targetX - xIntercept;
         errorY = targetY - yIntercept;
 
-        while (Math.abs(leftError) > COORDINATE_THRESHOLD || rightError > COORDINATE_THRESHOLD || Math.abs(errorY) > COORDINATE_THRESHOLD){
-            leftError = targetX - (leftEncoder.getCurrentPosition() / TICKS_PER_INCH);
-            rightError = targetX - (rightEncoder.getCurrentPosition() / TICKS_PER_INCH);
-            errorY = targetY - (errorY / TICKS_PER_INCH);
+        while ((Math.abs(leftError) > COORDINATE_THRESHOLD || Math.abs(rightError) > COORDINATE_THRESHOLD || Math.abs(errorY) > COORDINATE_THRESHOLD) && opMode.opModeIsActive()){
+            opMode.telemetry.addData("ticks", flMotor.getCurrentPosition());
+            opMode.telemetry.update();
+            leftError = targetX - (brMotor.getCurrentPosition() / TICKS_PER_INCH);
+            rightError = targetX - (flMotor.getCurrentPosition() / TICKS_PER_INCH);
+            errorY = targetY - (blMotor.getCurrentPosition() / TICKS_PER_INCH);
 
-            flMotor.setPower((leftError * DRIVE_P_COEFF * MAX_DRIVE_POWER) + (errorY * STRAFE_P_COEFF * MAX_DRIVE_POWER));
-            frMotor.setPower((rightError * DRIVE_P_COEFF * MAX_DRIVE_POWER) - (errorY * STRAFE_P_COEFF * MAX_DRIVE_POWER));
-            blMotor.setPower((leftError * DRIVE_P_COEFF * MAX_DRIVE_POWER) - (errorY * STRAFE_P_COEFF * MAX_DRIVE_POWER));
-            brMotor.setPower((rightError * DRIVE_P_COEFF * MAX_DRIVE_POWER) + (errorY * STRAFE_P_COEFF * MAX_DRIVE_POWER));
+            flPower = (leftError * DRIVE_P_COEFF * MAX_DRIVE_POWER) + (errorY * STRAFE_P_COEFF * MAX_DRIVE_POWER);
+            frPower = ((rightError * DRIVE_P_COEFF * MAX_DRIVE_POWER) - (errorY * STRAFE_P_COEFF * MAX_DRIVE_POWER));
+            blPower = ((leftError * DRIVE_P_COEFF * MAX_DRIVE_POWER) - (errorY * STRAFE_P_COEFF * MAX_DRIVE_POWER));
+            brPower = ((rightError * DRIVE_P_COEFF * MAX_DRIVE_POWER) + (errorY * STRAFE_P_COEFF * MAX_DRIVE_POWER));
+
+            normalize(.65);
+            normalizeForMin(.4);
+
+            flMotor.setPower(flPower);
+            frMotor.setPower(frPower);
+            blMotor.setPower(blPower);
+            brMotor.setPower(brPower);
         }
         flMotor.setPower(0);
         frMotor.setPower(0);
@@ -129,6 +140,32 @@ public class MM_Drivetrain {
         brMotor.setPower(0);
     }
 
+
+
+    private void normalizeForMin(double minPower) {
+        if (flPower < minPower && frPower < minPower && blPower < minPower && brPower < minPower) {
+            double rawMaxPower = Math.max(Math.max(Math.abs(flPower), Math.abs(frPower)),
+                    Math.max(Math.abs(blPower), Math.abs(brPower)));
+
+            double multiplier = minPower / rawMaxPower;
+            flPower *= multiplier;
+            frPower *= multiplier;
+            blPower *= multiplier;
+            brPower *= multiplier;
+        }
+    }
+
+    private void normalize(double upperPowerLimit) {
+        double rawMaxPower = Math.max(Math.max(Math.abs(flPower), Math.abs(frPower)),
+                Math.max(Math.abs(blPower), Math.abs(brPower)));
+
+        if (rawMaxPower > upperPowerLimit) {
+            flPower /= rawMaxPower;
+            frPower /= rawMaxPower;
+            blPower /= rawMaxPower;
+            brPower /= rawMaxPower;
+        }
+    }
 
 //    public void driveToAprilTag() {
 //        boolean rampedUp = false;
@@ -221,12 +258,22 @@ public class MM_Drivetrain {
         blMotor = opMode.hardwareMap.get(DcMotorEx.class, "blMotor");
         brMotor = opMode.hardwareMap.get(DcMotorEx.class, "brMotor");
 
-        leftEncoder = opMode.hardwareMap.get(DcMotorEx.class, "leftEncoder");
-        rightEncoder = opMode.hardwareMap.get(DcMotorEx.class, "rightEncoder");
-        backEncoder = opMode.hardwareMap.get(DcMotorEx.class, "backEncoder");
+
 
         flMotor.setDirection(DcMotorEx.Direction.REVERSE);
         blMotor.setDirection(DcMotorEx.Direction.REVERSE);
+
+
+
+        flMotor.setMode(DcMotorEx.RunMode.STOP_AND_RESET_ENCODER);
+        frMotor.setMode(DcMotorEx.RunMode.STOP_AND_RESET_ENCODER);
+        blMotor.setMode(DcMotorEx.RunMode.STOP_AND_RESET_ENCODER);
+        brMotor.setMode(DcMotorEx.RunMode.STOP_AND_RESET_ENCODER);
+
+        flMotor.setMode(DcMotorEx.RunMode.RUN_WITHOUT_ENCODER);
+        frMotor.setMode(DcMotorEx.RunMode.RUN_WITHOUT_ENCODER);
+        blMotor.setMode(DcMotorEx.RunMode.RUN_WITHOUT_ENCODER);
+        brMotor.setMode(DcMotorEx.RunMode.RUN_WITHOUT_ENCODER);
 
        // aprilTags = new MM_AprilTags(opMode);
     }
