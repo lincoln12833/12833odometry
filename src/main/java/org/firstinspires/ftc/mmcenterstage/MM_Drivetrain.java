@@ -105,10 +105,12 @@ public class MM_Drivetrain {
     }
 
 
-    public void goToCoordinates(double targetX, double targetY){
+    public void goToCoordinates(double targetX, double targetY, double startingX, double startingY){
         double leftError;
         double rightError;
         double errorY;
+        xIntercept = startingX;
+        yIntercept = startingY;
 
         leftError = targetX - xIntercept;
         rightError = targetX - xIntercept;
@@ -117,9 +119,9 @@ public class MM_Drivetrain {
         while ((Math.abs(leftError) > COORDINATE_THRESHOLD || Math.abs(rightError) > COORDINATE_THRESHOLD || Math.abs(errorY) > COORDINATE_THRESHOLD) && opMode.opModeIsActive()){
             opMode.telemetry.addData("ticks", flMotor.getCurrentPosition());
             opMode.telemetry.update();
-            leftError = targetX - (brMotor.getCurrentPosition() / TICKS_PER_INCH);
-            rightError = targetX - (flMotor.getCurrentPosition() / TICKS_PER_INCH);
-            errorY = targetY - (blMotor.getCurrentPosition() / TICKS_PER_INCH);
+            leftError = targetX - ((brMotor.getCurrentPosition() / TICKS_PER_INCH) + xIntercept);
+            rightError = targetX - ((flMotor.getCurrentPosition() / TICKS_PER_INCH) + xIntercept);
+            errorY = targetY - ((blMotor.getCurrentPosition() / TICKS_PER_INCH) + yIntercept );
 
             flPower = (leftError * DRIVE_P_COEFF * MAX_DRIVE_POWER) + (errorY * STRAFE_P_COEFF * MAX_DRIVE_POWER);
             frPower = ((rightError * DRIVE_P_COEFF * MAX_DRIVE_POWER) - (errorY * STRAFE_P_COEFF * MAX_DRIVE_POWER));

@@ -27,7 +27,7 @@ public class testOdometry extends LinearOpMode {
 
         waitForStart();
 
-        robot.drivetrain.goToCoordinates(24, 24);
+        robot.drivetrain.goToCoordinates(24, 24, 0, 24);
 
     }
 }
