@@ -2,15 +2,11 @@ package org.firstinspires.ftc.mmcenterstage;
 
 import com.acmerobotics.dashboard.config.Config;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
-import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.hardware.Gamepad;
 import com.qualcomm.robotcore.util.ElapsedTime;
 
 import org.firstinspires.ftc.robotcore.external.Telemetry;
-import org.firstinspires.ftc.vision.apriltag.AprilTagDetection;
-
-import java.util.List;
 
 public class MM_Drivetrain {
     private final LinearOpMode opMode;
@@ -53,8 +49,10 @@ public class MM_Drivetrain {
     private double blPower = 0;
     private double brPower = 0;
 
-    double xIntercept = 0; //TODO add changeable start
-    double yIntercept = 0;
+    double startX = 0;
+    double startY = 0;
+
+    boolean interceptsHaveBeenUsed = false;
 
     public MM_Drivetrain(LinearOpMode opMode, Gamepad currentGamepad1, Gamepad previousGamepad1, Telemetry dashboardTelemetry) {
         this.opMode = opMode;
@@ -62,7 +60,15 @@ public class MM_Drivetrain {
         this.previousGamepad1 = previousGamepad1;
         this.dashboardTelemetry = dashboardTelemetry;
         init();
+
+        dashboardTelemetry.addData("leftEncoderTicks", brMotor.getCurrentPosition());
+        dashboardTelemetry.addData("rightEncoderTicks", flMotor.getCurrentPosition());
+        dashboardTelemetry.addData("backEncoderTicks", blMotor.getCurrentPosition());
+        dashboardTelemetry.update();
     }
+
+
+
 
     public void driveWithSticks() {
         double drivePower = -opMode.gamepad1.left_stick_y;
@@ -77,6 +83,11 @@ public class MM_Drivetrain {
         if (currentGamepad1.a && !previousGamepad1.a) {
             isSlow = !isSlow;
         }
+
+        dashboardTelemetry.addData("leftEncoderTicks", brMotor.getCurrentPosition());
+        dashboardTelemetry.addData("rightEncoderTicks", flMotor.getCurrentPosition());
+        dashboardTelemetry.addData("backEncoderTicks", blMotor.getCurrentPosition());
+        dashboardTelemetry.update();
 
         double maxMotorPwr = Math.max(Math.max(Math.abs(FLPower), Math.abs(FRPower)),
                 Math.max(Math.abs(BLPower), Math.abs(BRPower)));
@@ -102,31 +113,82 @@ public class MM_Drivetrain {
 
         previousGamepad1.copy(currentGamepad1);
         currentGamepad1.copy(opMode.gamepad1);
+
+
     }
 
 
-    public void goToCoordinates(double targetX, double targetY, double startingX, double startingY){
+    public void goToCoordinates(double targetX, double targetY, double startingX, double startingY, double power){
+        startX = startingX;
+        startY = startingY;
+
+        double leftError = targetX - startX;
+        double rightError = targetX - startX;
+        double errorY = targetY - startY;
+
+        while ((Math.abs(leftError) > COORDINATE_THRESHOLD || Math.abs(rightError) > COORDINATE_THRESHOLD || Math.abs(errorY) > COORDINATE_THRESHOLD) && opMode.opModeIsActive()){
+            opMode.telemetry.addData("errorY", errorY);
+            opMode.telemetry.update();
+
+            dashboardTelemetry.addData("leftEncoderTicks", brMotor.getCurrentPosition());
+            dashboardTelemetry.addData("rightEncoderTicks", flMotor.getCurrentPosition());
+            dashboardTelemetry.addData("backEncoderTicks", blMotor.getCurrentPosition());
+            dashboardTelemetry.update();
+
+            leftError = targetX - ((brMotor.getCurrentPosition() / TICKS_PER_INCH) + startX);
+            rightError = targetX - ((flMotor.getCurrentPosition()/ TICKS_PER_INCH) + startX);
+            errorY = -(targetY - (-(blMotor.getCurrentPosition() / TICKS_PER_INCH) + startY));
+
+            flPower = (leftError * DRIVE_P_COEFF * MAX_DRIVE_POWER) + (errorY * STRAFE_P_COEFF * power);
+            frPower = ((rightError * DRIVE_P_COEFF * MAX_DRIVE_POWER) - (errorY * STRAFE_P_COEFF * power));
+            blPower = ((leftError * DRIVE_P_COEFF * MAX_DRIVE_POWER) - (errorY * STRAFE_P_COEFF * power));
+            brPower = ((rightError * DRIVE_P_COEFF * MAX_DRIVE_POWER) + (errorY * STRAFE_P_COEFF * power));
+
+            normalize(.65);
+            normalizeForMin(.4);
+
+            flMotor.setPower(flPower);
+            frMotor.setPower(frPower);
+            blMotor.setPower(blPower);
+            brMotor.setPower(brPower);
+        }
+        flMotor.setPower(0);
+        frMotor.setPower(0);
+        blMotor.setPower(0);
+        brMotor.setPower(0);
+
+        dashboardTelemetry.addData("leftEncoderTicks", brMotor.getCurrentPosition());
+        dashboardTelemetry.addData("rightEncoderTicks", flMotor.getCurrentPosition());
+        dashboardTelemetry.addData("backEncoderTicks", blMotor.getCurrentPosition());
+        dashboardTelemetry.update();
+    }
+
+    public void goToCoordinates(double targetX, double targetY, double power){
         double leftError;
         double rightError;
         double errorY;
-        xIntercept = startingX;
-        yIntercept = startingY;
 
-        leftError = targetX - xIntercept;
-        rightError = targetX - xIntercept;
-        errorY = targetY - yIntercept;
+        leftError = targetX - startX;
+        rightError = targetX - startX;
+        errorY = (targetY - startY);
 
         while ((Math.abs(leftError) > COORDINATE_THRESHOLD || Math.abs(rightError) > COORDINATE_THRESHOLD || Math.abs(errorY) > COORDINATE_THRESHOLD) && opMode.opModeIsActive()){
             opMode.telemetry.addData("ticks", flMotor.getCurrentPosition());
             opMode.telemetry.update();
-            leftError = targetX - ((brMotor.getCurrentPosition() / TICKS_PER_INCH) + xIntercept);
-            rightError = targetX - ((flMotor.getCurrentPosition() / TICKS_PER_INCH) + xIntercept);
-            errorY = targetY - ((blMotor.getCurrentPosition() / TICKS_PER_INCH) + yIntercept );
 
-            flPower = (leftError * DRIVE_P_COEFF * MAX_DRIVE_POWER) + (errorY * STRAFE_P_COEFF * MAX_DRIVE_POWER);
-            frPower = ((rightError * DRIVE_P_COEFF * MAX_DRIVE_POWER) - (errorY * STRAFE_P_COEFF * MAX_DRIVE_POWER));
-            blPower = ((leftError * DRIVE_P_COEFF * MAX_DRIVE_POWER) - (errorY * STRAFE_P_COEFF * MAX_DRIVE_POWER));
-            brPower = ((rightError * DRIVE_P_COEFF * MAX_DRIVE_POWER) + (errorY * STRAFE_P_COEFF * MAX_DRIVE_POWER));
+            dashboardTelemetry.addData("leftEncoderTicks", brMotor.getCurrentPosition());
+            dashboardTelemetry.addData("rightEncoderTicks", flMotor.getCurrentPosition());
+            dashboardTelemetry.addData("backEncoderTicks", blMotor.getCurrentPosition());
+            dashboardTelemetry.update();
+
+            leftError = targetX - ((brMotor.getCurrentPosition() / TICKS_PER_INCH) + startX);
+            rightError = targetX - ((flMotor.getCurrentPosition()/ TICKS_PER_INCH) + startX);
+            errorY = -(targetY - (-(blMotor.getCurrentPosition() / TICKS_PER_INCH) + startY));
+
+            flPower = (leftError * DRIVE_P_COEFF * MAX_DRIVE_POWER) + (errorY * STRAFE_P_COEFF * power);
+            frPower = ((rightError * DRIVE_P_COEFF * MAX_DRIVE_POWER) - (errorY * STRAFE_P_COEFF * power));
+            blPower = ((leftError * DRIVE_P_COEFF * MAX_DRIVE_POWER) - (errorY * STRAFE_P_COEFF * power));
+            brPower = ((rightError * DRIVE_P_COEFF * MAX_DRIVE_POWER) + (errorY * STRAFE_P_COEFF * power));
 
             normalize(.65);
             normalizeForMin(.4);
@@ -168,6 +230,8 @@ public class MM_Drivetrain {
             brPower /= rawMaxPower;
         }
     }
+
+
 
 //    public void driveToAprilTag() {
 //        boolean rampedUp = false;
